@@ -25,10 +25,10 @@ models_cache = {
     'ttl': 300  # 5 minutes cache
 }
 
-# Default model list fallback
+# Default model list fallback with Janitor.AI compatible format
 DEFAULT_MODELS = [
-    {"id": "deepseek-chat", "object": "model", "created": 1640995200, "owned_by": "deepseek"},
-    {"id": "deepseek-coder", "object": "model", "created": 1640995200, "owned_by": "deepseek"}
+    {"id": "deepseek/deepseek-chat", "object": "model", "created": 1640995200, "owned_by": "deepseek"},
+    {"id": "deepseek/deepseek-coder", "object": "model", "created": 1640995200, "owned_by": "deepseek"}
 ]
 
 DEEPSEEK_API_BASE = "https://api.deepseek.com"
@@ -51,9 +51,16 @@ def fetch_models_from_deepseek(api_key):
         
         if response.status_code == 200:
             data = response.json()
-            models = data.get('data', [])
+            original_models = data.get('data', [])
             
-            # Update cache
+            # Convert model IDs to Janitor.AI format (deepseek/model-name)
+            models = []
+            for model in original_models:
+                converted_model = model.copy()
+                converted_model['id'] = f"deepseek/{model['id']}"
+                models.append(converted_model)
+            
+            # Update cache with converted models
             models_cache['data'] = models
             models_cache['timestamp'] = datetime.now()
             
@@ -86,8 +93,10 @@ def convert_openai_to_deepseek(openai_request):
     # DeepSeek API is compatible with OpenAI format, so minimal conversion needed
     deepseek_request = openai_request.copy()
     
-    # Ensure model is set
-    if 'model' not in deepseek_request:
+    # Convert model format from 'deepseek/model-name' to 'model-name' for DeepSeek API
+    if 'model' in deepseek_request and deepseek_request['model'].startswith('deepseek/'):
+        deepseek_request['model'] = deepseek_request['model'].replace('deepseek/', '')
+    elif 'model' not in deepseek_request:
         deepseek_request['model'] = 'deepseek-chat'
     
     # Log the conversion for debugging
