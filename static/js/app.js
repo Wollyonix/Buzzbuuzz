@@ -136,7 +136,9 @@ class DeepSeekProxyApp {
 
         try {
             const fetchParam = this.fetchFromDeepSeek ? 'true' : 'false';
-            const response = await fetch(`/api/models?fetch=${fetchParam}&t=${Date.now()}`);
+            // Only add timestamp param if force refresh to prevent unnecessary cache busting
+            const timestampParam = forceRefresh ? `&t=${Date.now()}` : '';
+            const response = await fetch(`/api/models?fetch=${fetchParam}${timestampParam}`);
             const data = await response.json();
             
             // Clear and populate select
