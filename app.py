@@ -205,7 +205,9 @@ def openai_models():
         
     except Exception as e:
         logger.error(f"Error in OpenAI models endpoint: {str(e)}")
-        return jsonify({'data': DEFAULT_MODELS, 'object': 'list'})
+        response_obj = jsonify({'data': DEFAULT_MODELS, 'object': 'list'})
+        response_obj.headers['Access-Control-Allow-Origin'] = '*'
+        return response_obj
 
 @app.route('/v1/chat/completions', methods=['POST', 'OPTIONS'])
 def chat_completions():

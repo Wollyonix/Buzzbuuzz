@@ -1,7 +1,7 @@
 class DeepSeekProxyApp {
     constructor() {
         this.apiKey = '';
-        this.selectedModel = 'deepseek-chat';
+        this.selectedModel = 'deepseek/deepseek-chat';
         this.fetchFromDeepSeek = false;
         this.toast = null;
         
