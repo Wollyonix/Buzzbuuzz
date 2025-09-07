@@ -340,7 +340,9 @@ def status():
         }
         
         if api_key:
-            status_info['api_connection'] = validate_api_key(api_key)
+            # Don't validate API key automatically to prevent token usage
+            # Only indicate that a key is configured
+            status_info['api_connection'] = 'configured'
         
         return jsonify(status_info)
         

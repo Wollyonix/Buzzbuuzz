@@ -18,8 +18,8 @@ class DeepSeekProxyApp {
         const toastEl = document.getElementById('notification-toast');
         this.toast = new bootstrap.Toast(toastEl);
         
-        // Auto-refresh status every 5 minutes (reduced from 30 seconds to save tokens)
-        setInterval(() => this.updateStatus(), 300000);
+        // Auto-refresh status every 10 minutes (further reduced to save tokens)
+        setInterval(() => this.updateStatus(), 600000);
     }
 
     setupEventListeners() {
@@ -196,8 +196,8 @@ class DeepSeekProxyApp {
             
             // Update connection status
             const connectionStatus = document.getElementById('connection-status');
-            if (status.api_key_configured && status.api_connection) {
-                connectionStatus.innerHTML = '<i class="fas fa-circle me-1"></i>Connected';
+            if (status.api_key_configured && status.api_connection === 'configured') {
+                connectionStatus.innerHTML = '<i class="fas fa-circle me-1"></i>Key Set';
                 connectionStatus.className = 'badge bg-success';
             } else if (status.api_key_configured) {
                 connectionStatus.innerHTML = '<i class="fas fa-circle me-1"></i>Key Set';
