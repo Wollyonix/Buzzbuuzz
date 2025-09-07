@@ -4,6 +4,17 @@ This is a DeepSeek Proxy application that serves as an OpenAI-compatible middlew
 
 The proxy provides a web interface for configuration, model management, and monitoring, along with REST API endpoints that mirror OpenAI's structure for seamless integration with existing applications expecting OpenAI-compatible interfaces.
 
+# Recent Changes
+
+## Token Consumption Optimization (September 2025)
+- **CRITICAL FIX**: Eliminated all unnecessary API calls to prevent token waste
+- **Status Endpoint**: Removed automatic API key validation from status checks
+- **Models Endpoint**: Returns static models by default, no API calls unless explicitly requested
+- **Auto-refresh**: Reduced from 30 seconds to 10 minutes for status updates
+- **Startup Behavior**: Zero API calls during application initialization
+- **Page Load**: No automatic API calls when users load the web interface
+- **Replit Compatibility**: Optimized for frequent restarts on starter plan without token penalties
+
 # User Preferences
 
 Preferred communication style: Simple, everyday language.
@@ -14,7 +25,7 @@ Preferred communication style: Simple, everyday language.
 - **Technology Stack**: Pure HTML5, CSS3, and vanilla JavaScript with Bootstrap 5 for UI components
 - **Theme**: Dark theme implementation using Bootstrap's dark mode with custom CSS overrides
 - **Architecture Pattern**: Single-page application with class-based JavaScript organization
-- **Real-time Updates**: Automatic status polling every 30 seconds and toast notifications for user feedback
+- **Real-time Updates**: Automatic status polling every 10 minutes and toast notifications for user feedback
 - **Responsive Design**: Mobile-first approach using Bootstrap's grid system
 
 ## Backend Architecture
