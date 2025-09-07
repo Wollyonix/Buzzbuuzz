@@ -15,8 +15,13 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 app.secret_key = os.environ.get("SESSION_SECRET", "dev-secret-key-change-in-production")
 
-# Enable CORS for all routes
-CORS(app, origins=["*"])
+# Enable CORS for all routes with specific headers for API compatibility
+CORS(app, 
+     origins=["*"],
+     allow_headers=["Content-Type", "Authorization", "Accept", "Origin", "X-Requested-With"],
+     expose_headers=["Content-Type", "Content-Length"],
+     methods=["GET", "POST", "OPTIONS"],
+     supports_credentials=False)
 
 # Cache for models with expiration
 models_cache = {
@@ -166,8 +171,16 @@ def get_models():
         logger.error(f"Error getting models: {str(e)}")
         return jsonify({'data': DEFAULT_MODELS, 'source': 'default', 'error': str(e)})
 
-@app.route('/v1/models', methods=['GET'])
+@app.route('/v1/models', methods=['GET', 'OPTIONS'])
 def openai_models():
+    # Handle CORS preflight requests
+    if request.method == 'OPTIONS':
+        response = app.response_class()
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+        response.headers['Access-Control-Max-Age'] = '86400'
+        return response
     """OpenAI-compatible models endpoint"""
     try:
         api_key = request.headers.get('Authorization', '').replace('Bearer ', '')
@@ -175,21 +188,35 @@ def openai_models():
         if api_key:
             models = fetch_models_from_deepseek(api_key)
             if models:
-                return jsonify({'data': models, 'object': 'list'})
+                response_obj = jsonify({'data': models, 'object': 'list'})
+                response_obj.headers['Access-Control-Allow-Origin'] = '*'
+                return response_obj
         
         # Check cache
         if is_cache_valid():
-            return jsonify({'data': models_cache['data'], 'object': 'list'})
+            response_obj = jsonify({'data': models_cache['data'], 'object': 'list'})
+            response_obj.headers['Access-Control-Allow-Origin'] = '*'
+            return response_obj
         
         # Fallback to defaults
-        return jsonify({'data': DEFAULT_MODELS, 'object': 'list'})
+        response_obj = jsonify({'data': DEFAULT_MODELS, 'object': 'list'})
+        response_obj.headers['Access-Control-Allow-Origin'] = '*'
+        return response_obj
         
     except Exception as e:
         logger.error(f"Error in OpenAI models endpoint: {str(e)}")
         return jsonify({'data': DEFAULT_MODELS, 'object': 'list'})
 
-@app.route('/v1/chat/completions', methods=['POST'])
+@app.route('/v1/chat/completions', methods=['POST', 'OPTIONS'])
 def chat_completions():
+    # Handle CORS preflight requests
+    if request.method == 'OPTIONS':
+        response = app.response_class()
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+        response.headers['Access-Control-Max-Age'] = '86400'
+        return response
     """OpenAI-compatible chat completions endpoint (proxy to DeepSeek)"""
     try:
         # Get API key from Authorization header
@@ -232,15 +259,24 @@ def chat_completions():
             
             return app.response_class(
                 generate(),
-                mimetype='text/plain',
-                headers={'Content-Type': 'text/plain; charset=utf-8'}
+                mimetype='text/event-stream',
+                headers={
+                    'Content-Type': 'text/event-stream',
+                    'Cache-Control': 'no-cache',
+                    'Connection': 'keep-alive',
+                    'Access-Control-Allow-Origin': '*',
+                    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+                    'Access-Control-Allow-Methods': 'POST, OPTIONS'
+                }
             )
         
         # Handle regular response
         if response.status_code == 200:
             deepseek_response = response.json()
             openai_response = convert_deepseek_to_openai(deepseek_response)
-            return jsonify(openai_response)
+            response_obj = jsonify(openai_response)
+            response_obj.headers['Access-Control-Allow-Origin'] = '*'
+            return response_obj
         else:
             logger.error(f"DeepSeek API error: {response.status_code} - {response.text}")
             return jsonify({
