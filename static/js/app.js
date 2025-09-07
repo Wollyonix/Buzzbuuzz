@@ -11,15 +11,15 @@ class DeepSeekProxyApp {
     init() {
         this.setupEventListeners();
         this.updateProxyUrls();
-        this.loadModels();
+        this.loadDefaultModels(); // Start with default models to avoid API calls
         this.updateStatus();
         
         // Initialize toast
         const toastEl = document.getElementById('notification-toast');
         this.toast = new bootstrap.Toast(toastEl);
         
-        // Auto-refresh status every 30 seconds
-        setInterval(() => this.updateStatus(), 30000);
+        // Auto-refresh status every 5 minutes (reduced from 30 seconds to save tokens)
+        setInterval(() => this.updateStatus(), 300000);
     }
 
     setupEventListeners() {
@@ -27,10 +27,16 @@ class DeepSeekProxyApp {
         document.getElementById('validate-key').addEventListener('click', () => this.validateApiKey());
         document.getElementById('toggle-key-visibility').addEventListener('click', () => this.toggleKeyVisibility());
         
-        // Model management
+        // Model management  
         document.getElementById('fetch-models-toggle').addEventListener('change', (e) => {
             this.fetchFromDeepSeek = e.target.checked;
-            this.loadModels();
+            if (e.target.checked) {
+                // Only fetch when explicitly enabled by user
+                this.loadModels(true);
+            } else {
+                // Load default models when disabled
+                this.loadDefaultModels();
+            }
         });
         document.getElementById('refresh-models').addEventListener('click', () => this.loadModels(true));
         document.getElementById('model-select').addEventListener('change', (e) => {
@@ -87,7 +93,7 @@ class DeepSeekProxyApp {
             if (data.valid) {
                 this.apiKey = apiKey;
                 this.showValidationResult(true, 'API key is valid and saved');
-                this.loadModels(true); // Refresh models with new key
+                // Don't automatically fetch models - let user decide with toggle
                 this.logActivity('success', 'API key validated successfully');
             } else {
                 this.showValidationResult(false, data.error || 'Invalid API key');
@@ -296,6 +302,36 @@ class DeepSeekProxyApp {
     clearLogs() {
         const logContainer = document.getElementById('activity-log');
         logContainer.innerHTML = '<div class="text-muted">Activity will be logged here...</div>';
+    }
+
+    loadDefaultModels() {
+        const select = document.getElementById('model-select');
+        const sourceSpan = document.getElementById('model-source');
+        
+        // Default models without API call
+        const defaultModels = [
+            { id: 'deepseek/deepseek-chat', name: 'DeepSeek Chat' },
+            { id: 'deepseek/deepseek-coder', name: 'DeepSeek Coder' }
+        ];
+        
+        select.innerHTML = '';
+        defaultModels.forEach(model => {
+            const option = document.createElement('option');
+            option.value = model.id;
+            option.textContent = model.id;
+            if (model.id === this.selectedModel) {
+                option.selected = true;
+            }
+            select.appendChild(option);
+        });
+        
+        // Update UI indicators
+        document.getElementById('models-count').innerHTML = 
+            `<i class="fas fa-robot me-1"></i>Models: ${defaultModels.length}`;
+        sourceSpan.textContent = 'default';
+        sourceSpan.className = 'text-warning';
+        
+        this.logActivity('info', `Loaded ${defaultModels.length} default models (no API call)`);
     }
 }
 

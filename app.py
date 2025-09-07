@@ -148,23 +148,18 @@ def get_models():
         fetch_from_api = request.args.get('fetch', 'false').lower() == 'true'
         api_key = session.get('api_key') or request.headers.get('Authorization', '').replace('Bearer ', '')
         
-        # If fetch_from_api is True and we have an API key, fetch from DeepSeek
+        # ONLY fetch from API if explicitly requested AND we have an API key
         if fetch_from_api and api_key:
+            logger.info("Explicit API fetch requested by user")
             models = fetch_models_from_deepseek(api_key)
             if models:
                 return jsonify({'data': models, 'source': 'deepseek_api'})
         
-        # Check cache if we have an API key
-        if api_key and is_cache_valid():
+        # Check cache if we have an API key and fetch was requested
+        if fetch_from_api and api_key and is_cache_valid():
             return jsonify({'data': models_cache['data'], 'source': 'cache'})
         
-        # Try to fetch fresh data if we have an API key
-        if api_key:
-            models = fetch_models_from_deepseek(api_key)
-            if models:
-                return jsonify({'data': models, 'source': 'deepseek_api'})
-        
-        # Fallback to default models
+        # Default behavior: return static models (NO API CALL)
         return jsonify({'data': DEFAULT_MODELS, 'source': 'default'})
         
     except Exception as e:
@@ -181,24 +176,11 @@ def openai_models():
         response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
         response.headers['Access-Control-Max-Age'] = '86400'
         return response
-    """OpenAI-compatible models endpoint"""
+    """OpenAI-compatible models endpoint - returns default models to prevent token usage"""
     try:
-        api_key = request.headers.get('Authorization', '').replace('Bearer ', '')
-        
-        if api_key:
-            models = fetch_models_from_deepseek(api_key)
-            if models:
-                response_obj = jsonify({'data': models, 'object': 'list'})
-                response_obj.headers['Access-Control-Allow-Origin'] = '*'
-                return response_obj
-        
-        # Check cache
-        if is_cache_valid():
-            response_obj = jsonify({'data': models_cache['data'], 'object': 'list'})
-            response_obj.headers['Access-Control-Allow-Origin'] = '*'
-            return response_obj
-        
-        # Fallback to defaults
+        # For Janitor.AI compatibility, ALWAYS return default models without API calls
+        # This prevents unnecessary token consumption from model listing
+        logger.info("Models endpoint called - returning default models (no API call)")
         response_obj = jsonify({'data': DEFAULT_MODELS, 'object': 'list'})
         response_obj.headers['Access-Control-Allow-Origin'] = '*'
         return response_obj
