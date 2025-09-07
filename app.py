@@ -30,6 +30,14 @@ models_cache = {
     'ttl': 300  # 5 minutes cache
 }
 
+# Rate limiting for API calls
+api_call_timestamps = {
+    'models': [],
+    'validate': []
+}
+RATE_LIMIT_WINDOW = 60  # 1 minute
+MAX_CALLS_PER_MINUTE = 10
+
 # Default model list fallback with Janitor.AI compatible format
 DEFAULT_MODELS = [
     {"id": "deepseek/deepseek-chat", "object": "model", "created": 1640995200, "owned_by": "deepseek"},
@@ -47,6 +55,11 @@ def is_cache_valid():
 def fetch_models_from_deepseek(api_key):
     """Fetch available models from DeepSeek API"""
     try:
+        # Check rate limiting
+        if is_rate_limited('models'):
+            logger.warning("Models API rate limited, returning cached data")
+            return models_cache['data'] if models_cache['data'] else DEFAULT_MODELS
+            
         headers = {
             'Authorization': f'Bearer {api_key}',
             'Content-Type': 'application/json'
@@ -79,9 +92,32 @@ def fetch_models_from_deepseek(api_key):
         logger.error(f"Error fetching models from DeepSeek: {str(e)}")
         return None
 
+def is_rate_limited(endpoint):
+    """Check if API endpoint is rate limited"""
+    now = time.time()
+    timestamps = api_call_timestamps.get(endpoint, [])
+    
+    # Remove timestamps older than the window
+    timestamps = [t for t in timestamps if now - t < RATE_LIMIT_WINDOW]
+    api_call_timestamps[endpoint] = timestamps
+    
+    # Check if we're over the limit
+    if len(timestamps) >= MAX_CALLS_PER_MINUTE:
+        logger.warning(f"Rate limit exceeded for {endpoint}")
+        return True
+    
+    # Add current timestamp
+    timestamps.append(now)
+    return False
+
 def validate_api_key(api_key):
     """Validate API key by making a test request to DeepSeek"""
     try:
+        # Check rate limiting
+        if is_rate_limited('validate'):
+            logger.warning("Validation rate limited")
+            return False
+            
         headers = {
             'Authorization': f'Bearer {api_key}',
             'Content-Type': 'application/json'
