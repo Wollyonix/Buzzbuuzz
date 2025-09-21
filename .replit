@@ -1,4 +1,4 @@
-modules = ["python-3.11"]
+modules = ["nodejs-20", "python-3.11", "web"]
 
 [nix]
 channel = "stable-25_05"
@@ -44,6 +44,10 @@ args = "uv add flask-cors requests"
 [[ports]]
 localPort = 5000
 externalPort = 80
+
+[[ports]]
+localPort = 44209
+externalPort = 3000
 
 [agent]
 integrations = ["styling_replit==1.0.0"]
