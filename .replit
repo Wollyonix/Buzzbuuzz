@@ -46,5 +46,5 @@ localPort = 5000
 externalPort = 80
 
 [agent]
-integrations = ["styling_replit==1.0.0"]
+integrations = ["styling_replit:1.0.0", "github:1.0.0"]
 expertMode = true
