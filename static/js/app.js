@@ -1,7 +1,7 @@
 class DeepSeekProxyApp {
     constructor() {
         this.apiKey = '';
-        this.selectedModel = 'deepseek/deepseek-chat';
+        this.selectedModel = 'deepseek/deepseek-v3.1-terminus';
         this.fetchFromDeepSeek = false;
         this.toast = null;
         
@@ -312,8 +312,9 @@ class DeepSeekProxyApp {
         
         // Default models without API call
         const defaultModels = [
+            { id: 'deepseek/deepseek-v3.1-terminus', name: 'DeepSeek V3.1 Terminus' },
             { id: 'deepseek/deepseek-chat', name: 'DeepSeek Chat' },
-            { id: 'deepseek/deepseek-coder', name: 'DeepSeek Coder' }
+            { id: 'deepseek/deepseek-coder', name:'DeepSeek Coder' }
         ];
         
         select.innerHTML = '';

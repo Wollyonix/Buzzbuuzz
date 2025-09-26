@@ -42,6 +42,7 @@ MAX_CALLS_PER_MINUTE = 10
 
 # Default model list fallback with Janitor.AI compatible format
 DEFAULT_MODELS = [
+    {"id": "deepseek/deepseek-v3.1-terminus", "object": "model", "created": 1640995200, "owned_by": "deepseek"},
     {"id": "deepseek/deepseek-chat", "object": "model", "created": 1640995200, "owned_by": "deepseek"},
     {"id": "deepseek/deepseek-coder", "object": "model", "created": 1640995200, "owned_by": "deepseek"}
 ]
