@@ -269,16 +269,24 @@ def chat_completions():
             f"{DEEPSEEK_API_BASE}/v1/chat/completions",
             headers=headers,
             json=deepseek_request,
-            timeout=60,
+            timeout=(10, 60),  # connection timeout, read timeout
             stream=deepseek_request.get('stream', False)
         )
         
         # Handle streaming response
         if deepseek_request.get('stream', False):
             def generate():
-                for chunk in response.iter_content(chunk_size=1024):
-                    if chunk:
-                        yield chunk
+                try:
+                    for chunk in response.iter_content(chunk_size=1024):
+                        if chunk:
+                            yield chunk
+                except (requests.RequestException, GeneratorExit) as e:
+                    logger.warning(f"Stream interrupted: {str(e)}")
+                except Exception as e:
+                    logger.error(f"Streaming error: {str(e)}")
+                finally:
+                    # Ensure connection is closed
+                    response.close()
             
             return app.response_class(
                 generate(),
@@ -310,6 +318,22 @@ def chat_completions():
                 }
             }), response.status_code
             
+    except requests.Timeout as e:
+        logger.error(f"Request timeout: {str(e)}")
+        return jsonify({
+            'error': {
+                'message': 'Request timeout - DeepSeek API took too long to respond',
+                'type': 'timeout_error'
+            }
+        }), 504
+    except requests.ConnectionError as e:
+        logger.error(f"Connection error: {str(e)}")
+        return jsonify({
+            'error': {
+                'message': 'Connection error - Could not reach DeepSeek API',
+                'type': 'connection_error'
+            }
+        }), 503
     except requests.RequestException as e:
         logger.error(f"Request error: {str(e)}")
         return jsonify({
