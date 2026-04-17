@@ -1,19 +1,131 @@
-# PythonAnywhere Deployment Guide - DeepSeek Proxy
-## Fresh Account Setup (No Previous Data)
+# PythonAnywhere Flask Deployment Guide - 2026 Edition
+
+## ⚠️ IMPORTANT: Use Manual Configuration (Not Quickstart)
+
+For existing projects, choose **"Manual Configuration"** when creating your web app.
 
 ---
 
-## Step 1: Clone Your Repository
+## Step 1: Clean Setup (Fresh Start)
 
-1. Go to **"Consoles"** → Click **"Bash"**
-2. Clone your repo:
 ```bash
+# Remove everything and start fresh
 cd /home/daimondp
+rm -rf buzzbuuzz/
 git clone https://github.com/Wollyonix/Buzzbuuzz.git buzzbuuzz
 cd buzzbuuzz
 ```
 
-**Your repo is public, so no authentication needed!**
+---
+
+## Step 2: Create Virtual Environment
+
+```bash
+# Check your system image first (Account → System Image)
+# For innit system image (most common in 2026):
+mkvirtualenv -p /usr/local/bin/python3.11 buzzbuuzz-env
+
+# For older systems:
+# mkvirtualenv --python=/usr/bin/python3.11 buzzbuuzz-env
+
+# Activate
+workon buzzbuuzz-env
+```
+
+---
+
+## Step 3: Install Dependencies
+
+```bash
+pip install -r requirements.txt
+pip install python-dotenv  # For environment variables
+```
+
+---
+
+## Step 4: Create .env File for Environment Variables
+
+```bash
+# Create .env file in your project root
+echo "SESSION_SECRET=a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6a7b8c9d0e1f2" > .env
+```
+
+---
+
+## Step 5: Update WSGI File
+
+Your `wsgi.py` should be:
+
+```python
+import os
+import sys
+from dotenv import load_dotenv
+
+# Add project to path
+project_home = '/home/daimondp/buzzbuuzz'
+if project_home not in sys.path:
+    sys.path.insert(0, project_home)
+
+# Load environment variables FIRST
+load_dotenv(os.path.join(project_home, '.env'))
+
+# Import Flask app
+from app import app as application
+```
+
+---
+
+## Step 6: Web App Configuration
+
+1. **Web** tab → **Add a new web app**
+2. Choose **Manual Configuration** (not quickstart)
+3. **Domain:** `daimondp.pythonanywhere.com`
+4. **Python version:** `3.11`
+5. **Virtualenv:** `buzzbuuzz-env` (type it, system will auto-complete path)
+
+---
+
+## Step 7: Configure Paths
+
+In the web app settings:
+- **Source code:** `/home/daimondp/buzzbuuzz`
+- **Working directory:** `/home/daimondp/buzzbuuzz`
+- **WSGI file:** `/home/daimondp/buzzbuuzz/wsgi.py`
+- **Static files:** URL=`/static/` Directory=`/home/daimondp/buzzbuuzz/static`
+
+---
+
+## Step 8: Reload & Test
+
+1. Click **"Reload"** button
+2. Wait 2-3 minutes
+3. Visit: `https://daimondp.pythonanywhere.com`
+
+---
+
+## 🔍 Troubleshooting
+
+**502 Error:**
+- Check WSGI file syntax
+- Verify virtualenv is activated
+- Check error logs in Web tab
+
+**Import Errors:**
+- Make sure python-dotenv is installed
+- Verify .env file exists and is readable
+
+**Environment Variable Issues:**
+- .env file must be loaded BEFORE app import in WSGI
+- Check file permissions: `chmod 600 .env`
+
+---
+
+## 📞 Current PythonAnywhere Features (2026)
+
+- **System Images:** innit (latest), classic
+- **Python:** 3.8 - 3.13 available
+- **AI Tools:** Claude, Copilot integration
+- **Environment Variables:** python-dotenv method recommended
 
 ---
 
