@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Logs</title>
+    <link href="https://cdn.replit.com/agent/bootstrap-agent-dark-theme.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/custom.css') }}" rel="stylesheet">
+</head>
+<body>
+    <div class="container py-4">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h1 class="h3 mb-1">Chat Logs</h1>
+                <p class="text-muted mb-0">Halaman ini menampilkan log AI chat yang tersimpan.</p>
+            </div>
+            <div>
+                <a href="/" class="btn btn-outline-light">
+                    <i class="fas fa-arrow-left me-1"></i>Back
+                </a>
+            </div>
+        </div>
+
+        {% if items %}
+            <div class="list-group mb-4">
+                {% for entry in items %}
+                    <div class="list-group-item bg-body-secondary mb-3">
+                        <div class="d-flex justify-content-between mb-2">
+                            <span class="text-muted">{{ entry.timestamp }}</span>
+                            <span class="badge bg-info text-dark">{{ entry.request.model or 'unknown' }}</span>
+                        </div>
+                        <div class="mb-3">
+                            <strong>Request</strong>
+                            <pre class="bg-dark text-light p-3 rounded" style="white-space: pre-wrap;">{{ entry.request | tojson(indent=2) }}</pre>
+                        </div>
+                        <div>
+                            <strong>Response</strong>
+                            <pre class="bg-dark text-light p-3 rounded" style="white-space: pre-wrap;">{{ entry.response | tojson(indent=2) }}</pre>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="alert alert-secondary">Tidak ada log chat untuk ditampilkan.</div>
+        {% endif %}
+
+        <nav aria-label="Log pagination">
+            <ul class="pagination justify-content-center">
+                <li class="page-item {% if not prev_page %}disabled{% endif %}">
+                    <a class="page-link" href="{% if prev_page %}{{ url_for('view_logs') }}?page={{ prev_page }}{% else %}#{% endif %}">Previous</a>
+                </li>
+                <li class="page-item active"><span class="page-link">Page {{ page }}</span></li>
+                <li class="page-item {% if not next_page %}disabled{% endif %}">
+                    <a class="page-link" href="{% if next_page %}{{ url_for('view_logs') }}?page={{ next_page }}{% else %}#{% endif %}">Next</a>
+                </li>
+            </ul>
+        </nav>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

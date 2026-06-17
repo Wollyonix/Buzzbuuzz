@@ -48,6 +48,35 @@ DEFAULT_MODELS = [
 ]
 
 DEEPSEEK_API_BASE = "https://api.deepseek.com"
+CHAT_LOG_PATH = os.environ.get("CHAT_LOG_PATH", "chat_logs.jsonl")
+ENABLE_CHAT_LOGS = os.environ.get("ENABLE_CHAT_LOGS", "0") == "1"
+LOGS_PER_PAGE = 20
+
+
+def save_chat_log(request_obj, response_obj, meta=None):
+    if not ENABLE_CHAT_LOGS:
+        return
+
+    entry = {
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "request": {
+            "model": request_obj.get("model"),
+            "messages": request_obj.get("messages", []),
+            "temperature": request_obj.get("temperature"),
+            "top_p": request_obj.get("top_p"),
+            "frequency_penalty": request_obj.get("frequency_penalty"),
+            "presence_penalty": request_obj.get("presence_penalty")
+        },
+        "response": response_obj,
+        "meta": meta or {}
+    }
+
+    try:
+        with open(CHAT_LOG_PATH, "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except Exception as e:
+        logger.warning(f"Could not save chat log: {e}")
+
 
 def is_cache_valid():
     """Check if the models cache is still valid"""
@@ -143,8 +172,8 @@ def convert_openai_to_deepseek(openai_request):
     elif 'model' not in deepseek_request:
         deepseek_request['model'] = 'deepseek-chat'
     
-    # Log the conversion for debugging
-    logger.debug(f"Converted request: {json.dumps(deepseek_request, indent=2)}")
+    # Log the conversion for debugging without exposing full content
+    logger.debug(f"Converted request for model: {deepseek_request.get('model', 'unknown')}")
     
     return deepseek_request
 
@@ -305,6 +334,10 @@ def chat_completions():
         if response.status_code == 200:
             deepseek_response = response.json()
             openai_response = convert_deepseek_to_openai(deepseek_response)
+            try:
+                save_chat_log(deepseek_request, openai_response, meta={"model": deepseek_request.get("model")})
+            except Exception as e:
+                logger.warning(f"Failed to save chat log: {e}")
             response_obj = jsonify(openai_response)
             response_obj.headers['Access-Control-Allow-Origin'] = '*'
             return response_obj
@@ -376,6 +409,39 @@ def status():
     except Exception as e:
         logger.error(f"Error getting status: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
+@app.route('/logs')
+def view_logs():
+    """View saved chat logs with pagination"""
+    page = request.args.get('page', '1')
+    try:
+        page = max(1, int(page))
+    except ValueError:
+        page = 1
+
+    start = (page - 1) * LOGS_PER_PAGE
+    end = start + LOGS_PER_PAGE
+    items = []
+    next_page = None
+    prev_page = page - 1 if page > 1 else None
+
+    if os.path.exists(CHAT_LOG_PATH):
+        try:
+            with open(CHAT_LOG_PATH, 'r', encoding='utf-8') as f:
+                for i, line in enumerate(f):
+                    if i < start:
+                        continue
+                    if i >= end:
+                        next_page = page + 1
+                        break
+                    try:
+                        items.append(json.loads(line))
+                    except json.JSONDecodeError:
+                        continue
+        except Exception as e:
+            logger.error(f"Unable to read chat logs: {e}")
+
+    return render_template('logs.html', items=items, page=page, next_page=next_page, prev_page=prev_page)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
