@@ -302,15 +302,10 @@ class DeepSeekProxyApp {
     }
 
     clearLogs() {
-        // Prompt for password and call server-side clear API
         (async () => {
-            const pw = prompt('Enter logs password to clear:');
-            if (!pw) return;
             try {
                 const res = await fetch('/api/logs/clear', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({password: pw})
+                    method: 'POST'
                 });
                 const data = await res.json();
                 if (res.ok && data.ok) {

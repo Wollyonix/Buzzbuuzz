@@ -473,12 +473,6 @@ def status():
         return jsonify({'error': str(e)}), 500
 
 
-def _check_logs_password(provided):
-    if not LOGS_PASSWORD:
-        return False
-    return provided == LOGS_PASSWORD
-
-
 @app.route('/api/logs', methods=['GET'])
 def api_get_logs():
     """Return paginated logs as JSON"""
@@ -502,11 +496,6 @@ def api_get_logs():
 
 @app.route('/api/logs/clear', methods=['POST'])
 def api_clear_logs():
-    data = request.get_json() or {}
-    pw = data.get('password') or request.headers.get('X-Logs-Password')
-    if not _check_logs_password(pw):
-        return jsonify({'ok': False, 'error': 'Unauthorized'}), 401
-
     try:
         # Truncate file
         if portalocker:
@@ -526,10 +515,7 @@ def api_clear_logs():
 @app.route('/api/logs/delete', methods=['POST'])
 def api_delete_log():
     data = request.get_json() or {}
-    pw = data.get('password') or request.headers.get('X-Logs-Password')
     index = data.get('index')
-    if not _check_logs_password(pw):
-        return jsonify({'ok': False, 'error': 'Unauthorized'}), 401
     if index is None:
         return jsonify({'ok': False, 'error': 'index required'}), 400
     try:
@@ -549,11 +535,8 @@ def api_delete_log():
 @app.route('/api/logs/update', methods=['POST'])
 def api_update_log():
     data = request.get_json() or {}
-    pw = data.get('password') or request.headers.get('X-Logs-Password')
     index = data.get('index')
     entry = data.get('entry')
-    if not _check_logs_password(pw):
-        return jsonify({'ok': False, 'error': 'Unauthorized'}), 401
     if index is None or entry is None:
         return jsonify({'ok': False, 'error': 'index and entry required'}), 400
     try:
@@ -576,10 +559,6 @@ def api_update_log():
 
 @app.route('/api/logs/download', methods=['GET'])
 def api_download_logs():
-    pw = request.args.get('password') or request.headers.get('X-Logs-Password')
-    if not _check_logs_password(pw):
-        return jsonify({'ok': False, 'error': 'Unauthorized'}), 401
-
     if not os.path.exists(CHAT_LOG_PATH):
         return jsonify({'ok': False, 'error': 'no logs'}), 404
     try:

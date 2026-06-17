@@ -92,17 +92,12 @@
 
             // Clear / Download buttons
             document.getElementById('clear-logs').addEventListener('click', async ()=>{
-                const pw = prompt('Enter logs password to clear:');
-                if(!pw) return;
-                const res = await fetch('/api/logs/clear', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({password: pw})});
+                const res = await fetch('/api/logs/clear', {method:'POST'});
                 if(res.ok){ alert('Cleared'); window.location.reload(); } else { alert('Failed to clear logs'); }
             });
 
             document.getElementById('download-logs').addEventListener('click', ()=>{
-                const pw = prompt('Enter logs password to download:');
-                if(!pw) return;
-                const url = `/api/logs/download?password=${encodeURIComponent(pw)}`;
-                window.location = url;
+                window.location = '/api/logs/download';
             });
         })();
     </script>
