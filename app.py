@@ -49,6 +49,11 @@ DEFAULT_MODELS = [
     {"id": "deepseek/deepseek-coder", "object": "model", "created": 1640995200, "owned_by": "deepseek"}
 ]
 
+# Add V4 models to defaults so clients see new models without API calls
+DEFAULT_MODELS.extend([
+    {"id": "deepseek/deepseek-v4-flash", "object": "model", "created": 1710000000, "owned_by": "deepseek"},
+    {"id": "deepseek/deepseek-v4-pro", "object": "model", "created": 1710000000, "owned_by": "deepseek"}
+])
 DEEPSEEK_API_BASE = "https://api.deepseek.com"
 CHAT_LOG_PATH = os.environ.get("CHAT_LOG_PATH", "chat_logs.jsonl")
 ENABLE_CHAT_LOGS = os.environ.get("ENABLE_CHAT_LOGS", "0") == "1"
@@ -230,10 +235,23 @@ def convert_openai_to_deepseek(openai_request):
     deepseek_request = openai_request.copy()
     
     # Convert model format from 'deepseek/model-name' to 'model-name' for DeepSeek API
-    if 'model' in deepseek_request and deepseek_request['model'].startswith('deepseek/'):
-        deepseek_request['model'] = deepseek_request['model'].replace('deepseek/', '')
+    if 'model' in deepseek_request and isinstance(deepseek_request['model'], str):
+        m = deepseek_request['model']
+        # Normalize prefix
+        if m.startswith('deepseek/'):
+            m = m.replace('deepseek/', '')
+
+        # Backwards-compatibility: map deprecated names to V4 where appropriate
+        # According to DeepSeek docs, 'deepseek-chat' and 'deepseek-reasoner' map
+        # to non-thinking and thinking modes of deepseek-v4-flash respectively.
+        if m == 'deepseek-chat' or m == 'chat' or m == 'deepseek-chat':
+            m = 'deepseek-v4-flash'
+        elif m == 'deepseek-reasoner' or m == 'reasoner':
+            m = 'deepseek-v4-flash'
+
+        deepseek_request['model'] = m
     elif 'model' not in deepseek_request:
-        deepseek_request['model'] = 'deepseek-chat'
+        deepseek_request['model'] = 'deepseek-v4-flash'
     
     # Log the conversion for debugging without exposing full content
     logger.debug(f"Converted request for model: {deepseek_request.get('model', 'unknown')}")
