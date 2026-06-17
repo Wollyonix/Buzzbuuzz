@@ -91,6 +91,3 @@ logs/
 tmp/
 temp/
 
-# Replit specific
-.replit
-replit.nix
