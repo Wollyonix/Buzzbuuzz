@@ -482,7 +482,50 @@ def status():
 
 @app.route('/tokens', methods=['GET'])
 def tokens_get():
-    return render_template('tokens.html')
+    # Summarize existing chat logs (word-count token estimate)
+    rows = []
+    items = _read_all_logs()
+    for i, entry in enumerate(items):
+        ts = entry.get('timestamp')
+        req = entry.get('request', {})
+        resp = entry.get('response', {})
+
+        # Aggregate request text
+        req_text = ''
+        if isinstance(req, dict):
+            msgs = req.get('messages', [])
+            if isinstance(msgs, list):
+                parts = []
+                for m in msgs:
+                    if isinstance(m, dict):
+                        parts.append(m.get('content', '') or m.get('text', ''))
+                    elif isinstance(m, str):
+                        parts.append(m)
+                req_text = ' '.join([p for p in parts if p])
+        elif isinstance(req, str):
+            req_text = req
+
+        # Aggregate response text
+        resp_text = ''
+        if isinstance(resp, dict):
+            # try common fields
+            resp_text = _json.dumps(resp)
+        elif isinstance(resp, str):
+            resp_text = resp
+
+        req_tokens = len(req_text.split()) if req_text else 0
+        resp_tokens = len(resp_text.split()) if resp_text else 0
+        rows.append({
+            'index': i,
+            'timestamp': ts,
+            'req_tokens': req_tokens,
+            'resp_tokens': resp_tokens,
+            'total': req_tokens + resp_tokens
+        })
+
+    # sort recent first
+    rows = list(reversed(rows))
+    return render_template('tokens.html', log_rows=rows)
 
 
 @app.route('/tokens', methods=['POST'])

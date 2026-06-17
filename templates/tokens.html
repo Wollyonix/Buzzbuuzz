@@ -32,6 +32,34 @@
         </ul>
       </div>
       {% endif %}
+      {% if log_rows is defined %}
+      <hr>
+      <h3>Logged Requests</h3>
+      <div class="table-responsive">
+        <table class="table table-sm table-striped">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Timestamp</th>
+              <th>Request tokens</th>
+              <th>Response tokens</th>
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in log_rows %}
+            <tr>
+              <td>{{ loop.index }}</td>
+              <td>{{ r.timestamp }}</td>
+              <td>{{ r.req_tokens }}</td>
+              <td>{{ r.resp_tokens }}</td>
+              <td>{{ r.total }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
     </div>
   </body>
 </html>
