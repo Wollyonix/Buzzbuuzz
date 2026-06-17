@@ -347,6 +347,12 @@ def chat_completions():
         
         # Convert to DeepSeek format
         deepseek_request = convert_openai_to_deepseek(openai_request)
+
+        # Always save the incoming request immediately (useful for non-streaming misses)
+        try:
+            save_chat_log(deepseek_request, {"status": "pending"}, meta={"model": deepseek_request.get("model"), "note": "request-saved-before-response"})
+        except Exception as e:
+            logger.warning(f"Could not pre-save incoming request: {e}")
         
         # Make request to DeepSeek API
         headers = {
