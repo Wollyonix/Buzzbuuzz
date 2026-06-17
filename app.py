@@ -4,6 +4,7 @@ import logging
 import time
 from datetime import datetime, timedelta
 from flask import Flask, request, jsonify, render_template, session, make_response
+import json as _json
 import threading
 from flask_cors import CORS
 import requests
@@ -477,6 +478,59 @@ def status():
     except Exception as e:
         logger.error(f"Error getting status: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/tokens', methods=['GET'])
+def tokens_get():
+    return render_template('tokens.html')
+
+
+@app.route('/tokens', methods=['POST'])
+def tokens_post():
+    payload = request.form.get('payload', '').strip()
+    results = {'total': 0, 'details': []}
+
+    messages = None
+    try:
+        parsed = _json.loads(payload)
+        if isinstance(parsed, dict) and 'messages' in parsed and isinstance(parsed['messages'], list):
+            messages = parsed['messages']
+        elif isinstance(parsed, list):
+            messages = parsed
+    except Exception:
+        messages = None
+
+    if messages is None:
+        lines = [l.strip() for l in payload.splitlines() if l.strip()]
+        messages = []
+        for i, ln in enumerate(lines):
+            try:
+                obj = _json.loads(ln)
+                messages.append(obj)
+            except Exception:
+                messages.append({'content': ln, 'label': f'line {i+1}'})
+
+    total = 0
+    details = []
+    for i, m in enumerate(messages):
+        content = ''
+        label = f'message {i+1}'
+        if isinstance(m, dict):
+            content = m.get('content', '') or m.get('text', '') or ''
+            if 'role' in m:
+                label = f"{m.get('role')}"
+            elif 'label' in m:
+                label = m.get('label')
+        elif isinstance(m, str):
+            content = m
+        count = len(content.split())
+        total += count
+        details.append({'label': label, 'count': count})
+
+    results['total'] = total
+    results['details'] = details
+
+    return render_template('tokens.html', results=results, payload=payload)
 
 
 @app.route('/api/logs', methods=['GET'])
