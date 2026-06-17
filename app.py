@@ -3,7 +3,8 @@ import json
 import logging
 import time
 from datetime import datetime, timedelta
-from flask import Flask, request, jsonify, render_template, session
+from flask import Flask, request, jsonify, render_template, session, make_response
+import threading
 from flask_cors import CORS
 import requests
 
@@ -50,6 +51,16 @@ DEFAULT_MODELS = [
 DEEPSEEK_API_BASE = "https://api.deepseek.com"
 CHAT_LOG_PATH = os.environ.get("CHAT_LOG_PATH", "chat_logs.jsonl")
 ENABLE_CHAT_LOGS = os.environ.get("ENABLE_CHAT_LOGS", "0") == "1"
+LOGS_PASSWORD = os.environ.get("LOGS_PASSWORD")
+LOGS_PER_PAGE = int(os.environ.get("LOGS_PER_PAGE", "20"))
+LOGS_POLL_INTERVAL = float(os.environ.get("LOGS_POLL_INTERVAL", "1.5"))
+LOGS_LOCK = threading.Lock()
+
+# Optional cross-process file lock (recommended in multi-worker environments)
+try:
+    import portalocker
+except Exception:
+    portalocker = None
 LOGS_PER_PAGE = 20
 
 
@@ -72,10 +83,61 @@ def save_chat_log(request_obj, response_obj, meta=None):
     }
 
     try:
-        with open(CHAT_LOG_PATH, "a", encoding="utf-8") as f:
-            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        if portalocker:
+            with open(CHAT_LOG_PATH, "a", encoding="utf-8") as f:
+                portalocker.lock(f, portalocker.LOCK_EX)
+                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+                portalocker.unlock(f)
+        else:
+            with LOGS_LOCK:
+                with open(CHAT_LOG_PATH, "a", encoding="utf-8") as f:
+                    f.write(json.dumps(entry, ensure_ascii=False) + "\n")
     except Exception as e:
         logger.warning(f"Could not save chat log: {e}")
+
+
+def _read_all_logs():
+    items = []
+    if not os.path.exists(CHAT_LOG_PATH):
+        return items
+    try:
+        if portalocker:
+            with open(CHAT_LOG_PATH, 'r', encoding='utf-8') as f:
+                portalocker.lock(f, portalocker.LOCK_SH)
+                for line in f:
+                    try:
+                        items.append(json.loads(line))
+                    except Exception:
+                        continue
+                portalocker.unlock(f)
+        else:
+            with LOGS_LOCK:
+                with open(CHAT_LOG_PATH, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        try:
+                            items.append(json.loads(line))
+                        except Exception:
+                            continue
+    except Exception as e:
+        logger.error(f"Unable to read chat logs: {e}")
+    return items
+
+
+def _write_all_logs(items):
+    try:
+        if portalocker:
+            with open(CHAT_LOG_PATH, 'w', encoding='utf-8') as f:
+                portalocker.lock(f, portalocker.LOCK_EX)
+                for entry in items:
+                    f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+                portalocker.unlock(f)
+        else:
+            with LOGS_LOCK:
+                with open(CHAT_LOG_PATH, 'w', encoding='utf-8') as f:
+                    for entry in items:
+                        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except Exception as e:
+        logger.error(f"Unable to write chat logs: {e}")
 
 
 def is_cache_valid():
@@ -410,6 +472,127 @@ def status():
         logger.error(f"Error getting status: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+
+def _check_logs_password(provided):
+    if not LOGS_PASSWORD:
+        return False
+    return provided == LOGS_PASSWORD
+
+
+@app.route('/api/logs', methods=['GET'])
+def api_get_logs():
+    """Return paginated logs as JSON"""
+    if not ENABLE_CHAT_LOGS:
+        return jsonify({'enabled': False, 'items': [], 'page': 1, 'per_page': LOGS_PER_PAGE, 'total': 0})
+
+    try:
+        page = int(request.args.get('page', '1'))
+    except ValueError:
+        page = 1
+
+    all_items = _read_all_logs()
+    total = len(all_items)
+    per_page = LOGS_PER_PAGE
+    start = (page - 1) * per_page
+    end = start + per_page
+    items = all_items[start:end]
+
+    return jsonify({'enabled': True, 'items': items, 'page': page, 'per_page': per_page, 'total': total})
+
+
+@app.route('/api/logs/clear', methods=['POST'])
+def api_clear_logs():
+    data = request.get_json() or {}
+    pw = data.get('password') or request.headers.get('X-Logs-Password')
+    if not _check_logs_password(pw):
+        return jsonify({'ok': False, 'error': 'Unauthorized'}), 401
+
+    try:
+        # Truncate file
+        if portalocker:
+            with open(CHAT_LOG_PATH, 'w', encoding='utf-8') as f:
+                portalocker.lock(f, portalocker.LOCK_EX)
+                f.truncate(0)
+                portalocker.unlock(f)
+        else:
+            with LOGS_LOCK:
+                open(CHAT_LOG_PATH, 'w', encoding='utf-8').close()
+        return jsonify({'ok': True})
+    except Exception as e:
+        logger.error(f"Failed to clear logs: {e}")
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@app.route('/api/logs/delete', methods=['POST'])
+def api_delete_log():
+    data = request.get_json() or {}
+    pw = data.get('password') or request.headers.get('X-Logs-Password')
+    index = data.get('index')
+    if not _check_logs_password(pw):
+        return jsonify({'ok': False, 'error': 'Unauthorized'}), 401
+    if index is None:
+        return jsonify({'ok': False, 'error': 'index required'}), 400
+    try:
+        index = int(index)
+    except Exception:
+        return jsonify({'ok': False, 'error': 'invalid index'}), 400
+
+    items = _read_all_logs()
+    if index < 0 or index >= len(items):
+        return jsonify({'ok': False, 'error': 'index out of range'}), 400
+
+    items.pop(index)
+    _write_all_logs(items)
+    return jsonify({'ok': True})
+
+
+@app.route('/api/logs/update', methods=['POST'])
+def api_update_log():
+    data = request.get_json() or {}
+    pw = data.get('password') or request.headers.get('X-Logs-Password')
+    index = data.get('index')
+    entry = data.get('entry')
+    if not _check_logs_password(pw):
+        return jsonify({'ok': False, 'error': 'Unauthorized'}), 401
+    if index is None or entry is None:
+        return jsonify({'ok': False, 'error': 'index and entry required'}), 400
+    try:
+        index = int(index)
+    except Exception:
+        return jsonify({'ok': False, 'error': 'invalid index'}), 400
+
+    items = _read_all_logs()
+    if index < 0 or index >= len(items):
+        return jsonify({'ok': False, 'error': 'index out of range'}), 400
+
+    # Ensure entry is a dict
+    if not isinstance(entry, dict):
+        return jsonify({'ok': False, 'error': 'entry must be an object'}), 400
+
+    items[index] = entry
+    _write_all_logs(items)
+    return jsonify({'ok': True})
+
+
+@app.route('/api/logs/download', methods=['GET'])
+def api_download_logs():
+    pw = request.args.get('password') or request.headers.get('X-Logs-Password')
+    if not _check_logs_password(pw):
+        return jsonify({'ok': False, 'error': 'Unauthorized'}), 401
+
+    if not os.path.exists(CHAT_LOG_PATH):
+        return jsonify({'ok': False, 'error': 'no logs'}), 404
+    try:
+        with open(CHAT_LOG_PATH, 'r', encoding='utf-8') as f:
+            data = f.read()
+        resp = make_response(data)
+        resp.headers['Content-Type'] = 'text/plain; charset=utf-8'
+        resp.headers['Content-Disposition'] = 'attachment; filename="chat_logs.jsonl"'
+        return resp
+    except Exception as e:
+        logger.error(f"Failed to read logs for download: {e}")
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
 @app.route('/logs')
 def view_logs():
     """View saved chat logs with pagination"""
@@ -441,7 +624,7 @@ def view_logs():
         except Exception as e:
             logger.error(f"Unable to read chat logs: {e}")
 
-    return render_template('logs.html', items=items, page=page, next_page=next_page, prev_page=prev_page)
+    return render_template('logs.html', items=items, page=page, next_page=next_page, prev_page=prev_page, per_page=LOGS_PER_PAGE)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

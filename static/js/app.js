@@ -302,8 +302,28 @@ class DeepSeekProxyApp {
     }
 
     clearLogs() {
-        const logContainer = document.getElementById('activity-log');
-        logContainer.innerHTML = '<div class="text-muted">Activity will be logged here...</div>';
+        // Prompt for password and call server-side clear API
+        (async () => {
+            const pw = prompt('Enter logs password to clear:');
+            if (!pw) return;
+            try {
+                const res = await fetch('/api/logs/clear', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({password: pw})
+                });
+                const data = await res.json();
+                if (res.ok && data.ok) {
+                    const logContainer = document.getElementById('activity-log');
+                    logContainer.innerHTML = '<div class="text-muted">Activity will be logged here...</div>';
+                    this.showToast('Success', 'Logs cleared', 'success');
+                } else {
+                    this.showToast('Error', data.error || 'Failed to clear logs', 'error');
+                }
+            } catch (e) {
+                this.showToast('Error', 'Network error clearing logs', 'error');
+            }
+        })();
     }
 
     loadDefaultModels() {
