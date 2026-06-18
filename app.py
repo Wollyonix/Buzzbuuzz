@@ -422,17 +422,34 @@ def chat_completions():
         if deepseek_request.get('stream', False):
             def generate():
                 try:
+                    # Ensure raw stream will decode chunked responses correctly
+                    response.raw.decode_content = True
+                    # Iterate with small chunks and robustly handle socket timeouts
                     for chunk in response.iter_content(chunk_size=1024):
-                        if chunk:
-                            yield chunk
-                except (requests.RequestException, GeneratorExit) as e:
-                    logger.warning(f"Stream interrupted: {str(e)}")
+                        try:
+                            if chunk:
+                                yield chunk
+                        except GeneratorExit:
+                            # Client disconnected
+                            logger.info("Client disconnected from stream")
+                            break
+                except requests.ReadTimeout as e:
+                    logger.warning(f"Stream read timeout: {str(e)}")
+                    # Inform client of timeout in a safe way
+                    try:
+                        yield b"event: error\ndata: {\"error\": \"stream_timeout\"}\n\n"
+                    except Exception:
+                        pass
+                except requests.RequestException as e:
+                    logger.warning(f"Stream interrupted (request exception): {str(e)}")
                 except Exception as e:
                     logger.error(f"Streaming error: {str(e)}")
                 finally:
-                    # Ensure connection is closed
-                    response.close()
-            
+                    try:
+                        response.close()
+                    except Exception:
+                        pass
+
             return app.response_class(
                 generate(),
                 mimetype='text/event-stream',
