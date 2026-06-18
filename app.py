@@ -57,6 +57,8 @@ DEFAULT_MODELS.extend([
 DEEPSEEK_API_BASE = "https://api.deepseek.com"
 CHAT_LOG_PATH = os.environ.get("CHAT_LOG_PATH", "chat_logs.jsonl")
 ENABLE_CHAT_LOGS = os.environ.get("ENABLE_CHAT_LOGS", "0") == "1"
+# Toggle for DeepSeek "thinking" mode (default: enabled)
+ENABLE_THINKING_MODE = os.environ.get("ENABLE_THINKING_MODE", "1") == "1"
 LOGS_PASSWORD = os.environ.get("LOGS_PASSWORD")
 LOGS_PER_PAGE = int(os.environ.get("LOGS_PER_PAGE", "20"))
 LOGS_POLL_INTERVAL = float(os.environ.get("LOGS_POLL_INTERVAL", "1.5"))
@@ -252,6 +254,14 @@ def convert_openai_to_deepseek(openai_request):
         deepseek_request['model'] = m
     elif 'model' not in deepseek_request:
         deepseek_request['model'] = 'deepseek-v4-flash'
+    # Determine thinking mode: per-request override takes precedence
+    # DeepSeek supports a 'thinking' flag; map from incoming request if present,
+    # otherwise use global ENABLE_THINKING_MODE.
+    if 'thinking' in openai_request:
+        deepseek_request['thinking'] = bool(openai_request.get('thinking'))
+    else:
+        # preserve existing field if already set, else apply global toggle
+        deepseek_request.setdefault('thinking', ENABLE_THINKING_MODE)
     
     # Log the conversion for debugging without exposing full content
     logger.debug(f"Converted request for model: {deepseek_request.get('model', 'unknown')}")
