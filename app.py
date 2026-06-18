@@ -40,7 +40,7 @@ api_call_timestamps = {
     'validate': []
 }
 RATE_LIMIT_WINDOW = 60  # 1 minute
-MAX_CALLS_PER_MINUTE = 10
+MAX_CALLS_PER_MINUTE = 6
 
 # Default model list fallback with Janitor.AI compatible format
 DEFAULT_MODELS = [
