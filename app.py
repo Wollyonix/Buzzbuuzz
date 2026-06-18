@@ -8,6 +8,7 @@ import json as _json
 import threading
 from flask_cors import CORS
 import requests
+from requests.adapters import HTTPAdapter, Retry
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -47,6 +48,7 @@ DEFAULT_MODELS = [
     {"id": "deepseek/deepseek-v3.1-terminus", "object": "model", "created": 1640995200, "owned_by": "deepseek"},
     {"id": "deepseek/deepseek-chat", "object": "model", "created": 1640995200, "owned_by": "deepseek"},
     {"id": "deepseek/deepseek-coder", "object": "model", "created": 1640995200, "owned_by": "deepseek"}
+    
 ]
 
 # Add V4 models to defaults so clients see new models without API calls
@@ -70,6 +72,31 @@ try:
 except Exception:
     portalocker = None
 LOGS_PER_PAGE = 20
+
+# --- HTTP Session dengan Connection Pooling & Retry ---
+# Global session agar koneksi ke DeepSeek API di-reuse,
+# mencegah "Connection reset by peer" dan worker killed.
+http_session = requests.Session()
+
+# Retry strategy: up to 3 retries, with backoff, only on retry-able statuses
+retry_strategy = Retry(
+    total=3,
+    backoff_factor=1,
+    status_forcelist=[429, 500, 502, 503, 504],
+    allowed_methods=["POST", "GET"],
+    raise_on_status=False,
+)
+
+# Mount adapter for HTTPS with connection pooling limits
+adapter = HTTPAdapter(
+    pool_connections=10,       # max connections kept in pool
+    pool_maxsize=20,           # max total connections
+    max_retries=retry_strategy,
+    pool_block=False
+)
+http_session.mount("https://", adapter)
+http_session.mount("http://", adapter)
+http_session.headers.update({"Content-Type": "application/json"})
 
 
 def save_chat_log(request_obj, response_obj, meta=None):
@@ -164,31 +191,29 @@ def fetch_models_from_deepseek(api_key):
             
         headers = {
             'Authorization': f'Bearer {api_key}',
-            'Content-Type': 'application/json'
         }
         
-        response = requests.get(f"{DEEPSEEK_API_BASE}/v1/models", headers=headers, timeout=10)
-        
-        if response.status_code == 200:
-            data = response.json()
-            original_models = data.get('data', [])
-            
-            # Convert model IDs to OpenAI-compatible format (deepseek/model-name)
-            models = []
-            for model in original_models:
-                converted_model = model.copy()
-                converted_model['id'] = f"deepseek/{model['id']}"
-                models.append(converted_model)
-            
-            # Update cache with converted models
-            models_cache['data'] = models
-            models_cache['timestamp'] = datetime.now()
-            
-            logger.info(f"Successfully fetched {len(models)} models from DeepSeek")
-            return models
-        else:
-            logger.error(f"Failed to fetch models from DeepSeek: {response.status_code} - {response.text}")
-            return None
+        with http_session.get(f"{DEEPSEEK_API_BASE}/v1/models", headers=headers, timeout=10) as response:
+            if response.status_code == 200:
+                data = response.json()
+                original_models = data.get('data', [])
+                
+                # Convert model IDs to OpenAI-compatible format (deepseek/model-name)
+                models = []
+                for model in original_models:
+                    converted_model = model.copy()
+                    converted_model['id'] = f"deepseek/{model['id']}"
+                    models.append(converted_model)
+                
+                # Update cache with converted models
+                models_cache['data'] = models
+                models_cache['timestamp'] = datetime.now()
+                
+                logger.info(f"Successfully fetched {len(models)} models from DeepSeek")
+                return models
+            else:
+                logger.error(f"Failed to fetch models from DeepSeek: {response.status_code} - {response.text}")
+                return None
             
     except requests.RequestException as e:
         logger.error(f"Error fetching models from DeepSeek: {str(e)}")
@@ -222,11 +247,10 @@ def validate_api_key(api_key):
             
         headers = {
             'Authorization': f'Bearer {api_key}',
-            'Content-Type': 'application/json'
         }
         
-        response = requests.get(f"{DEEPSEEK_API_BASE}/v1/models", headers=headers, timeout=5)
-        return response.status_code == 200
+        with http_session.get(f"{DEEPSEEK_API_BASE}/v1/models", headers=headers, timeout=5) as response:
+            return response.status_code == 200
         
     except requests.RequestException:
         return False
@@ -393,7 +417,7 @@ def chat_completions():
         if not openai_request:
             return jsonify({'error': {'message': 'Request body is required'}}), 400
         
-        # Convert to DeepSeek format
+                # Convert to DeepSeek format
         deepseek_request = convert_openai_to_deepseek(openai_request)
 
         # Always save the incoming request immediately (useful for non-streaming misses)
@@ -402,15 +426,14 @@ def chat_completions():
         except Exception as e:
             logger.warning(f"Could not pre-save incoming request: {e}")
         
-        # Make request to DeepSeek API
+        # Make request to DeepSeek API using pooled session
         headers = {
             'Authorization': f'Bearer {api_key}',
-            'Content-Type': 'application/json'
         }
         
         logger.info(f"Proxying request to DeepSeek: {deepseek_request.get('model', 'unknown')}")
         
-        response = requests.post(
+        response = http_session.post(
             f"{DEEPSEEK_API_BASE}/v1/chat/completions",
             headers=headers,
             json=deepseek_request,
@@ -420,12 +443,15 @@ def chat_completions():
         
         # Handle streaming response
         if deepseek_request.get('stream', False):
-            def generate():
+            # Use a reference to response so we can close it from generator
+            resp_ref = response
+            
+            def generate(resp=resp_ref):
                 try:
                     # Ensure raw stream will decode chunked responses correctly
-                    response.raw.decode_content = True
+                    resp.raw.decode_content = True
                     # Iterate with small chunks and robustly handle socket timeouts
-                    for chunk in response.iter_content(chunk_size=1024):
+                    for chunk in resp.iter_content(chunk_size=1024):
                         try:
                             if chunk:
                                 yield chunk
@@ -446,7 +472,7 @@ def chat_completions():
                     logger.error(f"Streaming error: {str(e)}")
                 finally:
                     try:
-                        response.close()
+                        resp.close()
                     except Exception:
                         pass
 
@@ -463,9 +489,10 @@ def chat_completions():
                 }
             )
         
-        # Handle regular response
+        # Handle regular response (use 'with' to ensure connection is released)
         if response.status_code == 200:
             deepseek_response = response.json()
+            response.close()
             openai_response = convert_deepseek_to_openai(deepseek_response)
             try:
                 save_chat_log(deepseek_request, openai_response, meta={"model": deepseek_request.get("model")})
@@ -475,7 +502,9 @@ def chat_completions():
             response_obj.headers['Access-Control-Allow-Origin'] = '*'
             return response_obj
         else:
-            logger.error(f"DeepSeek API error: {response.status_code} - {response.text}")
+            error_text = response.text
+            response.close()
+            logger.error(f"DeepSeek API error: {response.status_code} - {error_text}")
             return jsonify({
                 'error': {
                     'message': f'DeepSeek API error: {response.status_code}',
