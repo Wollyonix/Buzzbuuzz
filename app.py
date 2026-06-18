@@ -258,10 +258,19 @@ def convert_openai_to_deepseek(openai_request):
     # DeepSeek supports a 'thinking' flag; map from incoming request if present,
     # otherwise use global ENABLE_THINKING_MODE.
     if 'thinking' in openai_request:
-        deepseek_request['thinking'] = bool(openai_request.get('thinking'))
+        # DeepSeek expects a ThinkingOptions struct, not a raw boolean.
+        # Map boolean to an explicit mode value.
+        req_thinking = openai_request.get('thinking')
+        if isinstance(req_thinking, bool):
+            deepseek_request['thinking'] = {'mode': 'thinking' if req_thinking else 'non-thinking'}
+        elif isinstance(req_thinking, dict):
+            deepseek_request['thinking'] = req_thinking
+        else:
+            # fallback: use global toggle
+            deepseek_request['thinking'] = {'mode': 'thinking' if ENABLE_THINKING_MODE else 'non-thinking'}
     else:
-        # preserve existing field if already set, else apply global toggle
-        deepseek_request.setdefault('thinking', ENABLE_THINKING_MODE)
+        # apply global toggle as structured object
+        deepseek_request.setdefault('thinking', {'mode': 'thinking' if ENABLE_THINKING_MODE else 'non-thinking'})
     
     # Log the conversion for debugging without exposing full content
     logger.debug(f"Converted request for model: {deepseek_request.get('model', 'unknown')}")
