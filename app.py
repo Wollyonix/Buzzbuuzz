@@ -42,7 +42,7 @@ api_call_timestamps = {
 RATE_LIMIT_WINDOW = 60  # 1 minute
 MAX_CALLS_PER_MINUTE = 6
 
-# Default model list fallback with Janitor.AI compatible format
+# Default model list fallback with OpenAI-compatible format
 DEFAULT_MODELS = [
     {"id": "deepseek/deepseek-v3.1-terminus", "object": "model", "created": 1640995200, "owned_by": "deepseek"},
     {"id": "deepseek/deepseek-chat", "object": "model", "created": 1640995200, "owned_by": "deepseek"},
@@ -173,7 +173,7 @@ def fetch_models_from_deepseek(api_key):
             data = response.json()
             original_models = data.get('data', [])
             
-            # Convert model IDs to Janitor.AI format (deepseek/model-name)
+            # Convert model IDs to OpenAI-compatible format (deepseek/model-name)
             models = []
             for model in original_models:
                 converted_model = model.copy()
@@ -356,7 +356,7 @@ def openai_models():
         return response
     """OpenAI-compatible models endpoint - returns default models to prevent token usage"""
     try:
-        # For Janitor.AI compatibility, ALWAYS return default models without API calls
+        # For OpenAI-compatible clients, ALWAYS return default models without API calls
         # This prevents unnecessary token consumption from model listing
         logger.info("Models endpoint called - returning default models (no API call)")
         response_obj = jsonify({'data': DEFAULT_MODELS, 'object': 'list'})
