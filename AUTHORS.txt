@@ -1,0 +1,6 @@
+Dominicus Daimon Pradana
+
+- Role: Lead developer / Maintainer
+- Email: diamondpradana@gmail.com
+- Location: Semarang City, Indonesia
+- Notes: Implemented Flask proxy, logging, streaming & deployment
